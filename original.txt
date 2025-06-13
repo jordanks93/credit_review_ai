@@ -1,0 +1,112 @@
+### Secure Credit Risk AI App - Starter Project (Python + Streamlit Frontend)
+
+# Structure:
+# /app
+#   |- main.py           <-- FastAPI app
+#   |- processor.py      <-- PDF loader and LLM processor
+#   |- security.py       <-- Encryption & security helpers
+#   |- streamlit_app.py  <-- Frontend UI
+#   |- requirements.txt  <-- Dependencies
+# /uploads               <-- Stores encrypted customer files
+
+# main.py
+from fastapi import FastAPI, File, UploadFile, Depends
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from processor import process_document
+from security import save_encrypted_file
+import os
+
+app = FastAPI()
+
+# Enable CORS for front-end (lock down in production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    filepath = os.path.join(UPLOAD_DIR, file.filename)
+    contents = await file.read()
+    enc_path = save_encrypted_file(filepath, contents)
+    summary = process_document(enc_path)
+    return JSONResponse(content={"summary": summary})
+
+# processor.py
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.chains.question_answering import load_qa_chain
+from langchain.chat_models import ChatOpenAI
+from security import decrypt_file
+
+llm = ChatOpenAI(temperature=0)
+
+def process_document(encrypted_path):
+    decrypted_path = decrypt_file(encrypted_path)
+    loader = PyPDFLoader(decrypted_path)
+    docs = loader.load()
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    chunks = splitter.split_documents(docs)
+
+    chain = load_qa_chain(llm, chain_type="stuff")
+    response = chain.run(input_documents=chunks, question="Summarize the financial health of this business.")
+    return response
+
+# security.py
+from cryptography.fernet import Fernet
+import os
+
+KEY_PATH = "secret.key"
+if not os.path.exists(KEY_PATH):
+    with open(KEY_PATH, "wb") as f:
+        f.write(Fernet.generate_key())
+
+with open(KEY_PATH, "rb") as f:
+    key = f.read()
+fernet = Fernet(key)
+
+def save_encrypted_file(filepath, data):
+    encrypted_data = fernet.encrypt(data)
+    enc_path = filepath + ".enc"
+    with open(enc_path, "wb") as f:
+        f.write(encrypted_data)
+    return enc_path
+
+def decrypt_file(enc_path):
+    with open(enc_path, "rb") as f:
+        encrypted_data = f.read()
+    decrypted_data = fernet.decrypt(encrypted_data)
+    temp_path = enc_path.replace(".enc", ".pdf")
+    with open(temp_path, "wb") as f:
+        f.write(decrypted_data)
+    return temp_path
+
+# streamlit_app.py
+import streamlit as st
+import requests
+
+st.set_page_config(page_title="Credit Analysis AI", layout="centered")
+st.title("📊 Credit Risk Analyzer")
+
+st.markdown("Upload a PDF credit document (e.g., bank statement, tax return) to summarize financial health.")
+
+uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+
+if uploaded_file is not None:
+    with st.spinner("Processing document securely..."):
+        files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
+        response = requests.post("http://localhost:8000/upload", files=files)
+
+    if response.status_code == 200:
+        summary = response.json().get("summary", "No summary returned.")
+        st.subheader("AI Credit Summary")
+        st.write(summary)
+    else:
+        st.error("Error processing file. Please try again.")
