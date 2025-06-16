@@ -9,3 +9,5 @@ PyPDF2
 streamlit
 requests
 python-dotenv
+langchain-community
+pypdf

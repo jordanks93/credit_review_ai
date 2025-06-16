@@ -25,5 +25,5 @@ def process_document(encrypted_path):
     chunks = splitter.split_documents(docs)
 
     chain = load_qa_chain(llm, chain_type="stuff")
-    response = chain.run(input_documents=chunks, question="Summarize the financial health of this business.")
+    response = chain.run(input_documents=chunks, question="Summarize the financial health of this business. Please list the pros and cons from a credit risk standpoint for a credit analyst in the trucking industry.")
     return response
