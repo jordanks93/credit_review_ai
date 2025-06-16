@@ -1,5 +1,4 @@
 .env
 /venv
 app/__pycache__/
-app/uploads/
-/uploads
+.pdf
