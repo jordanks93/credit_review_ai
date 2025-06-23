@@ -25,5 +25,5 @@ def process_document(encrypted_path):
     chunks = splitter.split_documents(docs)
 
     chain = load_qa_chain(llm, chain_type="stuff")
-    response = chain.run(input_documents=chunks, question="Can you give me a detailed credit risk analysis on this credit package from the perspective of a commercial credit analyst that will be presenting this deal to the CEO?")
+    response = chain.run(input_documents=chunks, question="Can you give me a detailed and professional credit risk analysis on this credit package from the perspective of a commercial credit analyst?")
     return response
